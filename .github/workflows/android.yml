@@ -1,0 +1,43 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Permitir execução
+        run: chmod +x gradlew
+
+      - name: Executar testes e compilar APK
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+
+      - name: Guardar APK de teste
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WarrantyBox-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
