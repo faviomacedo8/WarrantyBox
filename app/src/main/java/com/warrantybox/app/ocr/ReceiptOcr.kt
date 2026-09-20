@@ -50,13 +50,31 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
             ?.replace(" ", "")?.replace(',', '.')?.toBigDecimalOrNull()
             ?: prices.maxOrNull()
         val order = orderRegex.find(text)?.groupValues?.get(1)?.trim()
-        val store = lines.firstOrNull { line ->
-            line.length in 2..60 && line.any(Char::isLetter) && !line.contains(Regex("(?i)facture|invoice|ticket"))
+        val noise = Regex("(?i)facture|invoice|ticket|reçu|receipt|tva|vat|merci|thank|date|heure|time|total|montant|amount|payer|adresse|address|tél|tel|phone|www\\.|http|siret|siren|nif|tax|caisse|cashier|client|customer|carte|card|bancontact|visa|mastercard")
+        val store = lines.take(12)
+            .filter { it.length in 2..60 && it.any(Char::isLetter) && !it.contains(noise) && !it.matches(Regex(".*\\d{4,}.*")) }
+            .maxByOrNull { line ->
+                var score = 0
+                if (line == line.uppercase()) score += 4
+                if (line.length in 3..30) score += 3
+                if (line.count(Char::isLetter) >= 4) score += 2
+                if (!line.any(Char::isDigit)) score += 2
+                score
+            }
+        val productCandidates = lines.withIndex().filter { (_, line) ->
+            line.length in 3..100 && line.any(Char::isLetter) && !line.contains(noise) &&
+                line != store && !line.contains(Regex("(?i)eur|€|subtotal|sous-total|payment|paiement"))
         }
-        val product = lines.drop(1).firstOrNull { line ->
-            line.length in 3..80 && line.any(Char::isLetter) &&
-                !line.contains(Regex("(?i)total|tva|vat|merci|date|facture|invoice|ticket"))
-        }
+        val product = productCandidates.maxByOrNull { (idx,line) ->
+            var score = 0
+            if (line.count(Char::isLetter) >= 5) score += 3
+            if (line.length in 8..70) score += 2
+            if (line.any(Char::isDigit)) score += 2
+            if (idx > 1) score += 1
+            val nearby = lines.drop(idx).take(3).joinToString(" ")
+            if (priceRegex.containsMatchIn(nearby)) score += 5
+            score
+        }?.value
         return ReceiptDraft(
             store = store,
             dateMillis = dateMillis,
