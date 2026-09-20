@@ -70,7 +70,7 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
             val joined = pair.joinToString(" ")
             invoiceRegex.find(joined)?.groupValues?.getOrNull(1)?.trim()?.takeIf { validReference(it) }
         }
-        val noise = Regex("(?i)facture|invoice|ticket|reçu|receipt|tva|vat|merci|thank|date|heure|time|total|montant|amount|payer|adresse|address|tél|tel|phone|www\\.|http|siret|siren|nif|tax|caisse|cashier|client|customer|carte|card|bancontact|visa|mastercard")
+        val noise = Regex("(?i)facture|invoice|ticket|reçu|receipt|tva|vat|merci|thank|date|heure|time|total|montant|amount|payer|adresse|address|tél|tel|phone|www\\.|http|siret|siren|nif|tax|caisse|cashier|client|customer|carte|card|bancontact|visa|mastercard|iban|bic|swift|compte|account|bank|banque|betaling|paiement")
         val store = lines.take(12)
             .filter { it.length in 2..60 && it.any(Char::isLetter) && !it.contains(noise) && !it.matches(Regex(".*\\d{4,}.*")) }
             .maxByOrNull { line ->
@@ -128,6 +128,9 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
         if(s.length !in 3..120 || s.count(Char::isLetter)<3) return false
         val lower=s.lowercase()
         if(lower.startsWith("page ") || lower.startsWith("pagina ") || lower.startsWith("seite ") || lower=="pos") return false
+        if(lower.contains("iban") || lower.contains("bic") || lower.contains("swift")) return false
+        val compact=s.replace(" ","").replace("-","")
+        if(compact.matches(Regex("(?i)^[A-Z]{2}\\d{2}[A-Z0-9]{10,30}$"))) return false
         val addressWords=listOf("rue","avenue","boulevard","chaussée","chaussee","straat","laan","steenweg","street","road","rua","avenida","box","boîte","boite","bte")
         if(addressWords.any { lower.split(' ', ',', '.', ':').contains(it) }) return false
         return true
