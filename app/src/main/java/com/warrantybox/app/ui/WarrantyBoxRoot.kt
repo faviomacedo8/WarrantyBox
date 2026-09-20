@@ -88,7 +88,7 @@ private fun parseDate(v:String)=runCatching{LocalDate.parse(v,dateFmt).atStartOf
  fun analyse(u:Uri){uri=u;loading=true;error=null;vm.analyseReceipt(u){res->loading=false;res.onSuccess{draft=it}.onFailure{error=it.message?:"Não foi possível ler a fatura"}}}
  val pick=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){u->u?.let{runCatching{context.contentResolver.takePersistableUriPermission(it,Intent.FLAG_GRANT_READ_URI_PERMISSION)};analyse(it)}}
  val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()){ok->if(ok)cameraUri?.let(::analyse)}
- fun takePhoto(){val dir=File(context.cacheDir,"receipts").apply{mkdirs()};val f=File(dir,"receipt-"+java.lang.System.currentTimeMillis()+".jpg");cameraUri=FileProvider.getUriForFile(context,""+context.packageName+".files",f);camera.launch(cameraUri!!)}
+ fun takePhoto(){runCatching{val dir=File(context.cacheDir,"receipts").apply{mkdirs()};val f=File(dir,"receipt-"+java.lang.System.currentTimeMillis()+".jpg");cameraUri=FileProvider.getUriForFile(context,context.packageName+".files",f);camera.launch(cameraUri!!)}.onFailure{error="Não foi possível abrir a câmara: "+(it.message?:"erro desconhecido")}}
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
   Text("Digitalizar fatura",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text("Fotografa a fatura ou escolhe uma imagem. O WarrantyBox lê os dados e deixa-te confirmar antes de guardar.",color=MaterialTheme.colorScheme.onSurfaceVariant)
   Button(::takePhoto,Modifier.fillMaxWidth().height(58.dp)){Icon(Icons.Default.PhotoCamera,null);Spacer(Modifier.width(8.dp));Text("Fotografar fatura")}
