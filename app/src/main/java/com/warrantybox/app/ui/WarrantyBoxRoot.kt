@@ -90,7 +90,14 @@ private fun parseDate(v:String)=runCatching{LocalDate.parse(v,dateFmt).atStartOf
  val context=LocalContext.current
  var uri by remember{mutableStateOf<Uri?>(null)};var draft by remember{mutableStateOf<com.warrantybox.app.ocr.ReceiptDraft?>(null)};var loading by remember{mutableStateOf(false)};var error by remember{mutableStateOf<String?>(null)}
  fun analyse(u:Uri){uri=u;loading=true;error=null;vm.analyseReceipt(u){res->loading=false;res.onSuccess{draft=it}.onFailure{error=it.message?:"Não foi possível ler a fatura"}}}
- fun keepInvoice(source:Uri):Uri?=runCatching{val mime=context.contentResolver.getType(source).orEmpty();val ext=if(mime=="application/pdf")"pdf" else "jpg";val dir=File(context.filesDir,"invoices").apply{mkdirs()};val file=File(dir,"invoice-"+System.currentTimeMillis()+"."+ext);context.contentResolver.openInputStream(source)!!.use{input->FileOutputStream(file).use{output->input.copyTo(output)}};FileProvider.getUriForFile(context,context.packageName+".files",file)}.getOrNull()
+ fun keepInvoice(source:Uri):Uri?=runCatching{
+  val mime=context.contentResolver.getType(source).orEmpty()
+  val ext=if(mime=="application/pdf")"pdf" else "jpg"
+  val dir=File(context.filesDir,"invoices").apply{mkdirs()}
+  val file=File(dir,"invoice-"+System.currentTimeMillis()+"."+ext)
+  context.contentResolver.openInputStream(source)?.use{input->FileOutputStream(file).use{output->input.copyTo(output)}} ?: error("Não foi possível abrir o ficheiro")
+  FileProvider.getUriForFile(context,context.packageName+".files",file)
+ }.onFailure{android.util.Log.e("WarrantyBox","Erro ao guardar fatura",it)}.getOrNull()
  fun analyseAndKeep(source:Uri){val saved=keepInvoice(source);if(saved==null){error="Não foi possível guardar a fatura.";return};analyse(saved)}
  val pickImage=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){u->u?.let{runCatching{context.contentResolver.takePersistableUriPermission(it,Intent.FLAG_GRANT_READ_URI_PERMISSION)};analyseAndKeep(it)}}
  val pickPdf=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){u->u?.let{runCatching{context.contentResolver.takePersistableUriPermission(it,Intent.FLAG_GRANT_READ_URI_PERMISSION)};analyseAndKeep(it)}}
