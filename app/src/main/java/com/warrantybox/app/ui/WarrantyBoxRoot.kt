@@ -5,6 +5,10 @@ import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.app.Activity
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -63,7 +67,7 @@ private fun parseDate(v:String)=runCatching{LocalDate.parse(v,dateFmt).atStartOf
   if(security.biometricEnabled)OutlinedButton(::biometric){Icon(Icons.Default.Fingerprint,null);Spacer(Modifier.width(8.dp));Text(stringResource(R.string.biometric_lock))}
  }}
 }
-@Composable private fun Dashboard(items:List<ProductWithDetails>,open:(Long)->Unit,scan:()->Unit){val now=System.currentTimeMillis();val active=items.filter{it.product.warrantyEndDate>=now};val expiring=active.count{it.product.daysRemaining()<=90};LazyColumn(Modifier.fillMaxSize().padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){item{Text("WarrantyBox",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text(stringResource(R.string.tagline),color=MaterialTheme.colorScheme.onSurfaceVariant)};item{Button(onClick=scan,modifier=Modifier.fillMaxWidth().height(64.dp),shape=RoundedCornerShape(20.dp)){Icon(Icons.Default.DocumentScanner,null);Spacer(Modifier.width(10.dp));Text("Digitalizar fatura",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)}};item{Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Metric(stringResource(R.string.active_warranties),active.size.toString(),Modifier.weight(1f));Metric(stringResource(R.string.expiring),expiring.toString(),Modifier.weight(1f))}};item{Metric(stringResource(R.string.protected_value),money(active.sumOf{it.product.priceCents}),Modifier.fillMaxWidth())};item{Text(stringResource(R.string.next_expirations),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)};items(active.sortedBy{it.product.warrantyEndDate}.take(5)){ProductCard(it,open)}}}
+@Composable private fun Dashboard(items:List<ProductWithDetails>,open:(Long)->Unit,scan:()->Unit){val now=System.currentTimeMillis();val active=items.filter{it.product.warrantyEndDate>=now};val expiring=active.count{it.product.daysRemaining()<=90};LazyColumn(Modifier.fillMaxSize().padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){item{Text("WarrantyBox",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text(stringResource(R.string.tagline),color=MaterialTheme.colorScheme.onSurfaceVariant)};item{Button(onClick=scan,modifier=Modifier.fillMaxWidth().height(64.dp),shape=RoundedCornerShape(20.dp)){Icon(Icons.Default.DocumentScanner,null);Spacer(Modifier.width(10.dp));Text("Inserir Fatura",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)}};item{Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Metric(stringResource(R.string.active_warranties),active.size.toString(),Modifier.weight(1f));Metric(stringResource(R.string.expiring),expiring.toString(),Modifier.weight(1f))}};item{Metric(stringResource(R.string.protected_value),money(active.sumOf{it.product.priceCents}),Modifier.fillMaxWidth())};item{Text(stringResource(R.string.next_expirations),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)};items(active.sortedBy{it.product.warrantyEndDate}.take(5)){ProductCard(it,open)}}}
 @Composable private fun Metric(title:String,value:String,mod:Modifier){Card(mod,shape=RoundedCornerShape(22.dp)){Column(Modifier.padding(18.dp)){Text(title,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(value,style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)}}}
 
 @Composable private fun ProductsScreen(items:List<ProductWithDetails>,open:(Long)->Unit){
@@ -84,16 +88,19 @@ private fun parseDate(v:String)=runCatching{LocalDate.parse(v,dateFmt).atStartOf
 @Composable private fun ScanReceiptScreen(vm:MainViewModel,done:()->Unit){
  val context=LocalContext.current
  var uri by remember{mutableStateOf<Uri?>(null)};var draft by remember{mutableStateOf<com.warrantybox.app.ocr.ReceiptDraft?>(null)};var loading by remember{mutableStateOf(false)};var error by remember{mutableStateOf<String?>(null)}
- var cameraUri by remember{mutableStateOf<Uri?>(null)}
  fun analyse(u:Uri){uri=u;loading=true;error=null;vm.analyseReceipt(u){res->loading=false;res.onSuccess{draft=it}.onFailure{error=it.message?:"Não foi possível ler a fatura"}}}
- val pick=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){u->u?.let{runCatching{context.contentResolver.takePersistableUriPermission(it,Intent.FLAG_GRANT_READ_URI_PERMISSION)};analyse(it)}}
- val camera=rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()){ok->if(ok)cameraUri?.let(::analyse)}
- fun takePhoto(){runCatching{val dir=File(context.cacheDir,"receipts").apply{mkdirs()};val f=File(dir,"receipt-"+java.lang.System.currentTimeMillis()+".jpg");cameraUri=FileProvider.getUriForFile(context,context.packageName+".files",f);camera.launch(cameraUri!!)}.onFailure{error="Não foi possível abrir a câmara: "+(it.message?:"erro desconhecido")}}
+ val pickImage=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){u->u?.let{runCatching{context.contentResolver.takePersistableUriPermission(it,Intent.FLAG_GRANT_READ_URI_PERMISSION)};analyse(it)}}
+ val pickPdf=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){u->u?.let{runCatching{context.contentResolver.takePersistableUriPermission(it,Intent.FLAG_GRANT_READ_URI_PERMISSION)};analyse(it)}}
+ val scannerOptions=remember{GmsDocumentScannerOptions.Builder().setGalleryImportAllowed(true).setPageLimit(5).setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG,GmsDocumentScannerOptions.RESULT_FORMAT_PDF).setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL).build()}
+ val scanner=remember{GmsDocumentScanning.getClient(scannerOptions)}
+ val scanLauncher=rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()){r->if(r.resultCode==Activity.RESULT_OK){val result=GmsDocumentScanningResult.fromActivityResultIntent(r.data);val scanUri=result?.pages?.firstOrNull()?.imageUri?:result?.pdf?.uri;scanUri?.let(::analyse)}}
+ fun startScan(){loading=true;scanner.getStartScanIntent(context as Activity).addOnSuccessListener{sender->loading=false;scanLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(sender).build())}.addOnFailureListener{loading=false;error="Não foi possível iniciar o scanner: "+(it.message?:"erro desconhecido")}}
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
-  Text("Digitalizar fatura",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text("Fotografa a fatura ou escolhe uma imagem. O WarrantyBox lê os dados e deixa-te confirmar antes de guardar.",color=MaterialTheme.colorScheme.onSurfaceVariant)
-  Button(::takePhoto,Modifier.fillMaxWidth().height(58.dp)){Icon(Icons.Default.PhotoCamera,null);Spacer(Modifier.width(8.dp));Text("Fotografar fatura")}
-  OutlinedButton({pick.launch(arrayOf("image/*"))},Modifier.fillMaxWidth().height(54.dp)){Icon(Icons.Default.Image,null);Spacer(Modifier.width(8.dp));Text("Escolher imagem")}
-  if(loading){LinearProgressIndicator(Modifier.fillMaxWidth());Text("A ler a fatura…")};error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
+  Text("Inserir Fatura",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text("Escolhe como queres inserir a fatura. A digitalização deteta as margens, corrige a perspetiva e melhora a página antes da leitura.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+  Button(::startScan,Modifier.fillMaxWidth().height(60.dp)){Icon(Icons.Default.DocumentScanner,null);Spacer(Modifier.width(8.dp));Text("Digitalizar documento")}
+  OutlinedButton({pickImage.launch(arrayOf("image/*"))},Modifier.fillMaxWidth().height(54.dp)){Icon(Icons.Default.Image,null);Spacer(Modifier.width(8.dp));Text("Inserir foto")}
+  OutlinedButton({pickPdf.launch(arrayOf("application/pdf"))},Modifier.fillMaxWidth().height(54.dp)){Icon(Icons.Default.PictureAsPdf,null);Spacer(Modifier.width(8.dp));Text("Inserir PDF")}
+  if(loading){LinearProgressIndicator(Modifier.fillMaxWidth());Text("A processar a fatura…")};error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
   draft?.let{d->ReceiptReview(vm,d,uri,done)}
  }
 }
