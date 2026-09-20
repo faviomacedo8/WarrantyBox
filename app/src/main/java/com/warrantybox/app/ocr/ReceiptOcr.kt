@@ -51,7 +51,12 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
             ?.replace(" ", "")?.replace(',', '.')?.toBigDecimalOrNull()
             ?: prices.maxOrNull()
         val order = orderRegex.find(text)?.groupValues?.get(1)?.trim()
-        val invoiceNumber = invoiceRegex.find(text)?.groupValues?.get(1)?.trim()
+        val invoiceNumber = lines.firstNotNullOfOrNull { line ->
+            invoiceRegex.find(line)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        } ?: lines.windowed(2, 1, true).firstNotNullOfOrNull { pair ->
+            val joined = pair.joinToString(" ")
+            invoiceRegex.find(joined)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        }
         val noise = Regex("(?i)facture|invoice|ticket|reçu|receipt|tva|vat|merci|thank|date|heure|time|total|montant|amount|payer|adresse|address|tél|tel|phone|www\\.|http|siret|siren|nif|tax|caisse|cashier|client|customer|carte|card|bancontact|visa|mastercard")
         val store = lines.take(12)
             .filter { it.length in 2..60 && it.any(Char::isLetter) && !it.contains(noise) && !it.matches(Regex(".*\\d{4,}.*")) }
@@ -63,11 +68,16 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
                 if (!line.any(Char::isDigit)) score += 2
                 score
             }
+        val addressNoise = Regex("(?i)\\b(rue|avenue|av\\.?|boulevard|bd\\.?|chauss[eé]e|route|place|impasse|all[eé]e|straat|laan|steenweg|weg|plein|kaai|quai|street|st\\.?|road|rd\\.?|avenue|drive|dr\\.?|lane|ln\\.?|square|sq\\.?|travessa|rua|estrada|avenida|largo|praça|praca|box|bo[iî]te|bte)\\b|\\b\\d{4}\\s*[A-ZÀ-ÿ][A-ZÀ-ÿ -]+")
+        val productLabel = Regex("(?i)^(?:article|produit|désignation|designation|description|item|product|produto|artigo)\\s*[:#-]?\\s*(.+)$")
+        val labelledProduct = lines.firstNotNullOfOrNull { line -> productLabel.find(line)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.length >= 3 } }
         val productCandidates = lines.withIndex().filter { (_, line) ->
             line.length in 3..100 && line.any(Char::isLetter) && !line.contains(noise) &&
-                line != store && !line.contains(Regex("(?i)eur|€|subtotal|sous-total|payment|paiement"))
+                line != store && !line.contains(addressNoise) &&
+                !line.matches(Regex(".*\\b\\d{1,4}[,.]?\\s*(?:rue|straat|laan|avenue|boulevard|road|street|rua|avenida)\\b.*", RegexOption.IGNORE_CASE)) &&
+                !line.contains(Regex("(?i)eur|€|subtotal|sous-total|payment|paiement|livraison|delivery|expédition|expedition|facturation|billing"))
         }
-        val product = productCandidates.maxByOrNull { (idx,line) ->
+        val product = labelledProduct ?: productCandidates.maxByOrNull { (idx,line) ->
             var score = 0
             if (line.count(Char::isLetter) >= 5) score += 3
             if (line.length in 8..70) score += 2
@@ -91,7 +101,7 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
     companion object {
         private val dateRegex = Regex("""\b(0?[1-9]|[12]\d|3[01])[/.-](0?[1-9]|1[0-2])[/.-](20\d{2}|19\d{2})\b""")
         private val priceRegex = Regex("""(?<!\d)(\d{1,6}(?:[ .,]\d{3})*[,.]\d{2})(?:\s?(?:€|EUR))?""", RegexOption.IGNORE_CASE)
-        private val invoiceRegex = Regex("(?i)(?:factuurnummer|factuurnr|factuur\\s*(?:nr|nummer)|numero\\s+de\\s+facture|invoice\\s*(?:number|no)|invoice\\s*nr)\\s*[:.-]?\\s*([A-Z0-9][A-Z0-9._/-]{2,})")
+        private val invoiceRegex = Regex("(?i)(?:n(?:um[eé]ro|º|°)?\\s*(?:de\\s*)?facture|facture\\s*(?:n(?:um[eé]ro|º|°)?|no|nr)?|invoice\\s*(?:number|no|nr|#)?|fatura\\s*(?:n(?:ú|u)mero|n[º°o]?|no)?|n(?:ú|u)mero\\s*(?:da\\s*)?fatura|factuurnummer|factuurnr|factuur\\s*(?:nr|nummer))\\s*[:#.-]?\\s*([A-Z0-9][A-Z0-9._/-]{2,})")
         private val orderRegex = Regex("""(?i)(?:commande|order|bestelling|réf(?:érence)?|reference)\s*(?:n[°ºo.]*)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9._/-]{2,})""")
     }
 }
