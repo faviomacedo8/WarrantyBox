@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 
 @Database(
     entities = [ProductEntity::class, CategoryEntity::class, DocumentEntity::class, RepairEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,6 +28,11 @@ abstract class AppDatabase : RoomDatabase() {
 
         private fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "warrantybox.db")
+                .addMigrations(object : androidx.room.migration.Migration(1, 2) {
+                    override fun migrate(db: SupportSQLiteDatabase) {
+                        db.execSQL("ALTER TABLE products ADD COLUMN invoiceNumber TEXT NOT NULL DEFAULT ''")
+                    }
+                })
                 .addCallback(object : Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
