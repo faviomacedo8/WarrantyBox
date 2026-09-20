@@ -57,7 +57,7 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
             line.length in 3..80 && line.any(Char::isLetter) &&
                 !line.contains(Regex("(?i)total|tva|vat|merci|date|facture|invoice|ticket"))
         }
-        ReceiptDraft(
+        return ReceiptDraft(
             store = store,
             dateMillis = dateMillis,
             product = product,
