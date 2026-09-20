@@ -18,6 +18,7 @@ data class ReceiptDraft(
     val product: String? = null,
     val priceCents: Long? = null,
     val orderNumber: String? = null,
+    val invoiceNumber: String? = null,
     val rawText: String = ""
 )
 
@@ -50,6 +51,7 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
             ?.replace(" ", "")?.replace(',', '.')?.toBigDecimalOrNull()
             ?: prices.maxOrNull()
         val order = orderRegex.find(text)?.groupValues?.get(1)?.trim()
+        val invoiceNumber = invoiceRegex.find(text)?.groupValues?.get(1)?.trim()
         val noise = Regex("(?i)facture|invoice|ticket|reçu|receipt|tva|vat|merci|thank|date|heure|time|total|montant|amount|payer|adresse|address|tél|tel|phone|www\\.|http|siret|siren|nif|tax|caisse|cashier|client|customer|carte|card|bancontact|visa|mastercard")
         val store = lines.take(12)
             .filter { it.length in 2..60 && it.any(Char::isLetter) && !it.contains(noise) && !it.matches(Regex(".*\\d{4,}.*")) }
@@ -81,6 +83,7 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
             product = product,
             priceCents = totalPrice?.multiply(BigDecimal(100))?.setScale(0, RoundingMode.HALF_UP)?.longValueExact(),
             orderNumber = order,
+            invoiceNumber = invoiceNumber,
             rawText = text
         )
     }
@@ -88,6 +91,7 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
     companion object {
         private val dateRegex = Regex("""\b(0?[1-9]|[12]\d|3[01])[/.-](0?[1-9]|1[0-2])[/.-](20\d{2}|19\d{2})\b""")
         private val priceRegex = Regex("""(?<!\d)(\d{1,6}(?:[ .,]\d{3})*[,.]\d{2})(?:\s?(?:€|EUR))?""", RegexOption.IGNORE_CASE)
+        private val invoiceRegex = Regex("(?i)(?:factuurnummer|factuurnr|factuur\\s*(?:nr|nummer)|numero\\s+de\\s+facture|invoice\\s*(?:number|no)|invoice\\s*nr)\\s*[:.-]?\\s*([A-Z0-9][A-Z0-9._/-]{2,})")
         private val orderRegex = Regex("""(?i)(?:commande|order|bestelling|réf(?:érence)?|reference)\s*(?:n[°ºo.]*)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9._/-]{2,})""")
     }
 }
