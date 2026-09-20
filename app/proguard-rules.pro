@@ -1,0 +1,1 @@
+-keep class com.warrantybox.app.data.** { *; }
