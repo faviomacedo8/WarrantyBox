@@ -38,6 +38,8 @@ class WarrantyRepository(
     suspend fun addCategory(name: String) = dao.insertCategory(CategoryEntity(name = name.trim()))
     suspend fun addRepair(r: RepairEntity) = dao.insertRepair(r)
     suspend fun addDocument(d: DocumentEntity) = dao.insertDocument(d)
+    suspend fun deleteDocument(d: DocumentEntity) = dao.deleteDocument(d)
+    suspend fun deleteRepair(r: RepairEntity) = dao.deleteRepair(r)
 
     suspend fun export(uri: Uri) {
         val payload = BackupPayload(
