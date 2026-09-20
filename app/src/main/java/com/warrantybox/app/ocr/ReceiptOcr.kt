@@ -68,7 +68,7 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
             invoiceRegex.find(line)?.groupValues?.getOrNull(1)?.trim()?.takeIf { validReference(it) }
         } ?: lines.windowed(2, 1, true).firstNotNullOfOrNull { pair ->
             val joined = pair.joinToString(" ")
-            invoiceRegex.find(joined)?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+            invoiceRegex.find(joined)?.groupValues?.getOrNull(1)?.trim()?.takeIf { validReference(it) }
         }
         val noise = Regex("(?i)facture|invoice|ticket|reçu|receipt|tva|vat|merci|thank|date|heure|time|total|montant|amount|payer|adresse|address|tél|tel|phone|www\\.|http|siret|siren|nif|tax|caisse|cashier|client|customer|carte|card|bancontact|visa|mastercard")
         val store = lines.take(12)
@@ -118,8 +118,9 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
     private fun validReference(v:String):Boolean {
         val s=v.trim()
         if(s.length < 3) return false
-        if(s.matches(Regex("(?i)^(pos|page|pagina|seite)$"))) return false
+        if(s.matches(Regex("(?i)^(pos|page|pagina|seite)(?:[ .:#-]*\\d*)?$"))) return false
         if(s.matches(Regex("""\d{1,2}[./-]\d{1,2}[./-]\d{2,4}"""))) return false
+        if(s.equals("pos",true) || s.startsWith("pos ",true)) return false
         return s.any(Char::isDigit) && !s.contains(Regex("(?i)^(de|du|da|of)$"))
     }
     private fun validProduct(v:String):Boolean {
