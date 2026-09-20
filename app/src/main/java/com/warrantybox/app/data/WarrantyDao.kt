@@ -17,8 +17,14 @@ import kotlinx.coroutines.flow.Flow
  @Query("SELECT c.name category, COALESCE(SUM(p.priceCents),0) total FROM products p LEFT JOIN categories c ON c.id=p.categoryId GROUP BY c.name ORDER BY total DESC") fun totalsByCategory():Flow<List<CategoryTotal>>
  @Query("SELECT * FROM products") suspend fun allProducts():List<ProductEntity>
  @Query("SELECT * FROM categories") suspend fun allCategories():List<CategoryEntity>
+ @Query("SELECT * FROM documents") suspend fun allDocuments():List<DocumentEntity>
+ @Query("SELECT * FROM repairs") suspend fun allRepairs():List<RepairEntity>
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun restoreProducts(values:List<ProductEntity>)
  @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun restoreCategories(values:List<CategoryEntity>)
+ @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun restoreDocuments(values:List<DocumentEntity>)
+ @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun restoreRepairs(values:List<RepairEntity>)
+ @Query("DELETE FROM repairs") suspend fun clearRepairs()
+ @Query("DELETE FROM documents") suspend fun clearDocuments()
  @Query("DELETE FROM products") suspend fun clearProducts()
  @Query("DELETE FROM categories") suspend fun clearCategories()
 }
