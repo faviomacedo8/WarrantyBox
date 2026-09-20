@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -31,11 +32,13 @@ import coil.compose.AsyncImage
 import com.warrantybox.app.R
 import com.warrantybox.app.data.*
 import com.warrantybox.app.notifications.WarrantyWorker
+import com.warrantybox.app.security.SecurityManager
 import kotlinx.coroutines.flow.*
 import java.io.File
 import java.text.NumberFormat
 import java.time.*
 import java.time.format.DateTimeFormatter
+import android.provider.OpenableColumns
 import java.util.*
 
 private val dateFmt=DateTimeFormatter.ofPattern("dd/MM/yyyy")
@@ -44,15 +47,22 @@ private fun date(ms:Long)=Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()
 private fun parseDate(v:String)=runCatching{LocalDate.parse(v,dateFmt).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()}.getOrNull()
 
 @Composable fun WarrantyBoxRoot(vm:MainViewModel,dark:Boolean,onDark:(Boolean)->Unit,activity:FragmentActivity){
- val nav=rememberNavController(); val products by vm.products.collectAsState(); val prefs=remember{activity.getSharedPreferences("settings",Context.MODE_PRIVATE)};var unlocked by remember{mutableStateOf(!prefs.getBoolean("biometric",false))}
- if(!unlocked){LockScreen{val prompt=BiometricPrompt(activity,object:BiometricPrompt.AuthenticationCallback(){override fun onAuthenticationSucceeded(r:BiometricPrompt.AuthenticationResult){unlocked=true}});prompt.authenticate(BiometricPrompt.PromptInfo.Builder().setTitle("WarrantyBox").setSubtitle(activity.getString(R.string.biometric_lock)).setNegativeButtonText(activity.getString(R.string.cancel)).build())};return}
+ val nav=rememberNavController(); val products by vm.products.collectAsState(); val prefs=remember{activity.getSharedPreferences("settings",Context.MODE_PRIVATE)}
+ val security=remember{SecurityManager(activity)};var unlocked by remember{mutableStateOf(!security.lockEnabled)}
+ if(!unlocked){LockScreen(security,activity){unlocked=true};return}
  Scaffold(bottomBar={NavigationBar{listOf("home" to Icons.Default.Home,"products" to Icons.Default.Inventory2,"add" to Icons.Default.AddCircle,"stats" to Icons.Default.BarChart,"settings" to Icons.Default.Settings).forEach{(r,i)->NavigationBarItem(selected=nav.currentBackStackEntryAsState().value?.destination?.route==r,onClick={nav.navigate(r){popUpTo("home");launchSingleTop=true}},icon={Icon(i,null)},label={Text(when(r){"home"->stringResource(R.string.home);"products"->stringResource(R.string.products);"add"->stringResource(R.string.add);"stats"->stringResource(R.string.statistics);else->stringResource(R.string.settings)})})}}},floatingActionButton={if(nav.currentBackStackEntryAsState().value?.destination?.route=="home")FloatingActionButton({nav.navigate("add")}){Icon(Icons.Default.Add,null)}}){pad->
   NavHost(nav,"home",Modifier.padding(pad)){composable("home"){Dashboard(products,{nav.navigate("detail/$it")})};composable("products"){ProductsScreen(products,{nav.navigate("detail/$it")})};composable("add"){ProductForm(vm,null,{nav.popBackStack()})};composable("edit/{id}"){b->ProductForm(vm,b.arguments?.getString("id")?.toLong(),{nav.popBackStack()})};composable("detail/{id}"){b->DetailScreen(vm,b.arguments?.getString("id")!!.toLong(),nav)};composable("problem/{id}"){b->ProblemScreen(vm,b.arguments?.getString("id")!!.toLong())};composable("stats"){StatsScreen(vm)};composable("settings"){SettingsScreen(vm,dark,onDark,prefs,activity)}}
  }
 }
 
-@Composable private fun LockScreen(auth:()->Unit){Box(Modifier.fillMaxSize(),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(18.dp)){Icon(Icons.Default.VerifiedUser,null,Modifier.size(72.dp),MaterialTheme.colorScheme.primary);Text("WarrantyBox",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Button(auth){Icon(Icons.Default.Fingerprint,null);Spacer(Modifier.width(8.dp));Text(stringResource(R.string.biometric_lock))}}}}
-
+@Composable private fun LockScreen(security:SecurityManager,activity:FragmentActivity,unlocked:()->Unit){
+ var pin by remember{mutableStateOf("")};var error by remember{mutableStateOf(false)}
+ fun biometric(){val prompt=BiometricPrompt(activity,object:BiometricPrompt.AuthenticationCallback(){override fun onAuthenticationSucceeded(r:BiometricPrompt.AuthenticationResult)=unlocked();override fun onAuthenticationError(c:Int,m:CharSequence){error=true}});prompt.authenticate(BiometricPrompt.PromptInfo.Builder().setTitle("WarrantyBox").setSubtitle(activity.getString(R.string.biometric_lock)).setNegativeButtonText(activity.getString(R.string.cancel)).build())}
+ Box(Modifier.fillMaxSize().padding(24.dp),contentAlignment=Alignment.Center){Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(16.dp)){Icon(Icons.Default.VerifiedUser,null,Modifier.size(72.dp),MaterialTheme.colorScheme.primary);Text("WarrantyBox",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold)
+  if(security.hasPin){OutlinedTextField(pin,{pin=it.filter(Char::isDigit).take(6);error=false},label={Text("PIN")},visualTransformation=PasswordVisualTransformation(),keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.NumberPassword),isError=error,supportingText=if(error){{Text("PIN incorreto")}}else null,singleLine=true);Button({if(security.verifyPin(pin))unlocked()else error=true},enabled=pin.length>=4){Text("Desbloquear")}}
+  if(security.biometricEnabled)OutlinedButton(::biometric){Icon(Icons.Default.Fingerprint,null);Spacer(Modifier.width(8.dp));Text(stringResource(R.string.biometric_lock))}
+ }}
+}
 @Composable private fun Dashboard(items:List<ProductWithDetails>,open:(Long)->Unit){val now=System.currentTimeMillis();val active=items.filter{it.product.warrantyEndDate>=now};val expiring=active.count{it.product.daysRemaining()<=90};LazyColumn(Modifier.fillMaxSize().padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){item{Text("WarrantyBox",style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Bold);Text(stringResource(R.string.tagline),color=MaterialTheme.colorScheme.onSurfaceVariant)};item{Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Metric(stringResource(R.string.active_warranties),active.size.toString(),Modifier.weight(1f));Metric(stringResource(R.string.expiring),expiring.toString(),Modifier.weight(1f))}};item{Metric(stringResource(R.string.protected_value),money(active.sumOf{it.product.priceCents}),Modifier.fillMaxWidth())};item{Text(stringResource(R.string.next_expirations),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)};items(active.sortedBy{it.product.warrantyEndDate}.take(5)){ProductCard(it,open)}}}
 @Composable private fun Metric(title:String,value:String,mod:Modifier){Card(mod,shape=RoundedCornerShape(22.dp)){Column(Modifier.padding(18.dp)){Text(title,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(value,style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold)}}}
 
