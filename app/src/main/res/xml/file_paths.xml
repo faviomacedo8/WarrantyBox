@@ -2,4 +2,5 @@
     <cache-path name="reports" path="reports/" />
     <cache-path name="receipts" path="receipts/" />
     <files-path name="documents" path="documents/" />
+    <files-path name="invoices" path="invoices/" />
 </paths>
