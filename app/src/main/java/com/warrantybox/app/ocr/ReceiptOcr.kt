@@ -125,9 +125,10 @@ class LocalReceiptOcr(private val context: Context) : ReceiptOcr {
     private fun validProduct(v:String):Boolean {
         val s=v.trim()
         if(s.length !in 3..120 || s.count(Char::isLetter)<3) return false
-        if(s.matches(Regex("(?i)^(page|pagina|seite)\s*\d+\s*(?:de|of|sur)?\s*\d*$"))) return false
-        if(s.matches(Regex("(?i)^pos\s*\d*$"))) return false
-        if(s.contains(Regex("(?i)\b(rue|avenue|boulevard|chaussée|chaussee|straat|laan|steenweg|street|road|rua|avenida|box|boîte|boite|bte)\b"))) return false
+        val lower=s.lowercase()
+        if(lower.startsWith("page ") || lower.startsWith("pagina ") || lower.startsWith("seite ") || lower=="pos") return false
+        val addressWords=listOf("rue","avenue","boulevard","chaussée","chaussee","straat","laan","steenweg","street","road","rua","avenida","box","boîte","boite","bte")
+        if(addressWords.any { lower.split(' ', ',', '.', ':').contains(it) }) return false
         return true
     }
 
